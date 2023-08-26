@@ -95,15 +95,15 @@ func (d *df) populateDfResult() {
 }
 
 func makeDf(path string) (*df, error) {
-    return &df{p: path}, nil
+	d := &df{p: path}
+	d.populateDfResult()
+        return d, nil
 }
 
 func (d *df) total() uint64 {
-	d.populateDfResult()
 	return d.tol
 }
 
 func (d *df) available() uint64 {
-	d.populateDfResult()
 	return d.avl
 }
