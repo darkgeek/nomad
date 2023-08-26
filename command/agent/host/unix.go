@@ -8,7 +8,10 @@ package host
 
 import (
 	"strings"
-	"syscall"
+    "bytes"
+    "log"
+    "os/exec"
+    "strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -53,20 +56,52 @@ func nullStr(bs []byte) string {
 	return string(bs[:i])
 }
 
+func strToUint64(str string) uint64 {
+    ui64, err := strconv.ParseUint(str, 10, 64)
+    if err != nil {
+        panic(err)
+    }
+
+    return ui64
+}
+
 type df struct {
-	s *syscall.Statfs_t
+    p string
+    tol uint64
+    avl uint64
+}
+
+func (d *df) populateDfResult() {
+    cmd := exec.Command("df", "-P", "-b")
+
+    var out bytes.Buffer
+    cmd.Stdout = &out
+
+    err := cmd.Run()
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    outStr := out.String()
+    lines := strings.Split(outStr, "\n")
+    for _, ln := range lines[1:] {
+        parts := strings.Split(ln, " ")
+        if len(parts) == 6 && strings.Compare(d.p, parts[5]) == 0 {
+            d.tol = 512*strToUint64(parts[1])
+            d.avl = 512*strToUint64(parts[3])
+        }
+    }
 }
 
 func makeDf(path string) (*df, error) {
-	var s syscall.Statfs_t
-	err := syscall.Statfs(path, &s)
-	return &df{s: &s}, err
+    return &df{p: path}, nil
 }
 
 func (d *df) total() uint64 {
-	return d.s.Blocks * uint64(d.s.Bsize)
+	return d.tol
 }
 
 func (d *df) available() uint64 {
-	return d.s.Bavail * uint64(d.s.Bsize)
+	return d.avl
 }

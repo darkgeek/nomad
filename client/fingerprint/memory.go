@@ -5,10 +5,13 @@ package fingerprint
 
 import (
 	"fmt"
+    "strconv"
+    "os/exec"
+    "bytes"
+	"strings"
 
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/nomad/structs"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 const bytesInMB int64 = 1024 * 1024
@@ -27,20 +30,43 @@ func NewMemoryFingerprint(logger log.Logger) Fingerprint {
 	return f
 }
 
+func strToUint64(str string) uint64 {
+    ui64, err := strconv.ParseUint(str, 10, 64)
+    if err != nil {
+        panic(err)
+    }
+
+    return ui64
+}
+
+func getTotalPhysicalMem() uint64 {
+    cmd := exec.Command("sysctl", "hw.usermem64")
+
+    var out bytes.Buffer
+    cmd.Stdout = &out
+
+    err := cmd.Run()
+
+    if err != nil {
+        panic(err)
+    }
+
+    outStr := out.String()
+    parts := strings.Split(outStr, " ")
+    if len(parts) != 3 {
+        panic("malformed sysctl hw.usermem64 output")
+    }
+
+    return strToUint64(strings.TrimSpace(parts[2]))
+}
+
 func (f *MemoryFingerprint) Fingerprint(req *FingerprintRequest, resp *FingerprintResponse) error {
 	var totalMemory int64
 	cfg := req.Config
 	if cfg.MemoryMB != 0 {
 		totalMemory = int64(cfg.MemoryMB) * bytesInMB
 	} else {
-		memInfo, err := mem.VirtualMemory()
-		if err != nil {
-			f.logger.Warn("error reading memory information", "error", err)
-			return err
-		}
-		if memInfo.Total > 0 {
-			totalMemory = int64(memInfo.Total)
-		}
+	    totalMemory = int64(getTotalPhysicalMem())
 	}
 
 	if totalMemory > 0 {
